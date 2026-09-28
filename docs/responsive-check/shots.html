@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<style>
+  body { margin:0; background:#e9edf1; display:flex; gap:20px; padding:20px; align-items:flex-start; font-family:system-ui,"Microsoft YaHei UI",sans-serif; }
+  figure { margin:0; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 6px 20px rgba(0,0,0,.12); }
+  figcaption { font:600 12px/1.4 system-ui,"Microsoft YaHei UI",sans-serif; padding:9px 11px; color:#38404a; background:#fff; border-bottom:1px solid #eef0f2; }
+  iframe { display:block; width:390px; height:844px; border:0; }
+</style>
+</head>
+<body>
+  <figure><figcaption>① 手机 390px：侧栏收起（默认）— 左上为菜单按钮</figcaption><iframe src="mobile-check.html?s=closed"></iframe></figure>
+  <figure><figcaption>② 手机 390px：点击菜单后侧栏滑出（含遮罩）</figcaption><iframe src="mobile-check.html?s=open"></iframe></figure>
+  <figure><figcaption>③ 手机 390px：控制台页 — 侧栏改为顶部横向标签</figcaption><iframe src="console-check.html"></iframe></figure>
+  <figure><figcaption>④ 手机 390px：历史很多时抽屉（底部账号区仍固定可见）</figcaption><iframe src="mobile-check.html?s=open&many=1"></iframe></figure>
+</body>
+</html>

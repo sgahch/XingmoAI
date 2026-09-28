@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>app.js 行为自检</title>
+<link rel="stylesheet" href="../../web/styles.css" />
+</head>
+<body>
+<div id="app"></div>
+<script>
+  // ---- 桩：模拟后端，让 app.js 直接进入聊天页 ----
+  var json = function (data) {
+    return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  window.fetch = function (url, options) {
+    var u = String(url);
+    if (u.indexOf('/api/auth/me') >= 0) return Promise.resolve(json({ user: { username: 'Ynchen' } }));
+    if (u.indexOf('/api/conversations') >= 0) return Promise.resolve(json([{ id: 1, title: '测试会话一' }, { id: 2, title: '测试会话二' }]));
+    if (u.indexOf('/api/auth/logout') >= 0) return Promise.resolve(json({ ok: true }));
+    return Promise.resolve(json({}));
+  };
+</script>
+<script src="../../web/app.js"></script>
+<script>
+  function report() {
+    var log = [];
+    var shell = document.querySelector('.chat-shell');
+    var btn = document.querySelector('[data-action="toggle-sidebar"]');
+    var scrim = document.querySelector('.sidebar-scrim');
+    var sb = document.querySelector('.doubao-sidebar');
+    var sbcs = sb ? getComputedStyle(sb) : null;
+    log.push('inner=' + window.innerWidth);
+    log.push('shell=' + !!shell);
+    log.push('btn=' + !!btn);
+    log.push('scrim=' + !!scrim);
+    log.push('sidebarDisplay=' + (sbcs ? sbcs.display : 'n/a') + ' pos=' + (sbcs ? sbcs.position : 'n/a'));
+    if (btn && shell) {
+      btn.click();
+      log.push('click1>>> open=' + shell.classList.contains('sidebar-open') + ' collapsed=' + shell.classList.contains('sidebar-collapsed'));
+      btn.click();
+      log.push('click2>>> open=' + shell.classList.contains('sidebar-open') + ' collapsed=' + shell.classList.contains('sidebar-collapsed'));
+    }
+    if (btn && shell && scrim) {
+      btn.click();
+      var before = shell.classList.contains('sidebar-open');
+      scrim.click();
+      log.push('scrimClick>>> beforeOpen=' + before + ' afterOpen=' + shell.classList.contains('sidebar-open'));
+    }
+    if (document.querySelector('.conversation')) {
+      document.querySelectorAll('.conversation')[1].click();
+      log.push('openConv>>> scrolled=' + (document.querySelector('#chatScroll') ? 'ok' : 'no'));
+    }
+    var text = log.join(' | ');
+    document.title = text;
+    try { if (window.parent !== window) window.parent.postMessage(text, '*'); } catch (e) {}
+  }
+  // 等 render() 完成（内部含 await）
+  setTimeout(report, 400);
+</script>
+</body>
+</html>

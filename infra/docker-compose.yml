@@ -1,0 +1,62 @@
+services:
+  xingmo-server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ../data:/app/data
+    ports:
+      - "5178:5178"
+    networks:
+      - xingmo-internal
+
+  # NewAPI is deliberately not published to the host. Only xingmo-server can call it.
+  new-api:
+    image: calciumion/new-api:latest
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    environment:
+      SQL_DSN: postgresql://${NEWAPI_DB_USER:-xingmo}:${NEWAPI_DB_PASSWORD:?set NEWAPI_DB_PASSWORD}@postgres:5432/new-api
+      REDIS_CONN_STRING: redis://:${NEWAPI_REDIS_PASSWORD:?set NEWAPI_REDIS_PASSWORD}@redis:6379
+      TZ: Asia/Shanghai
+      SESSION_SECRET: ${NEWAPI_SESSION_SECRET:?set NEWAPI_SESSION_SECRET}
+      ERROR_LOG_ENABLED: "true"
+      BATCH_UPDATE_ENABLED: "true"
+      NODE_NAME: xingmo-newapi-internal
+    volumes:
+      - newapi-data:/data
+      - newapi-logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - xingmo-internal
+
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${NEWAPI_DB_USER:-xingmo}
+      POSTGRES_PASSWORD: ${NEWAPI_DB_PASSWORD:?set NEWAPI_DB_PASSWORD}
+      POSTGRES_DB: new-api
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - xingmo-internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${NEWAPI_REDIS_PASSWORD:?set NEWAPI_REDIS_PASSWORD}"]
+    networks:
+      - xingmo-internal
+
+networks:
+  xingmo-internal:
+    driver: bridge
+
+volumes:
+  newapi-data:
+  newapi-logs:
+  postgres-data:

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>手机端布局自检（控制台页）</title>
+<link rel="stylesheet" href="../../web/styles.css" />
+</head>
+<body>
+<main class="shell">
+  <header class="topbar">
+    <a class="brand" href="#"><img src="../../web/assets/stardevil-mark.png" alt="星魔 Logo"><span>星魔<small>STARDEVIL</small></span></a>
+    <nav class="nav"><button>智能对话</button><button class="active">控制台</button><button>开发者</button></nav>
+    <div class="top-actions"><span class="status">服务正常</span><span class="user-name">Ynchen</span><button class="top-logout">退出</button><span class="avatar">Y</span></div>
+  </header>
+  <section class="console">
+    <aside class="console-nav">
+      <div class="nav-heading">星魔控制台</div>
+      <button class="active">概览</button>
+      <button>企业知识库</button>
+      <button>API 密钥</button>
+      <button>对话记录</button>
+      <button>模型通道</button>
+    </aside>
+    <section class="console-content">
+      <div class="page-heading"><div><h1>运营概览</h1><p>星魔服务运行稳定，当前展示数据来自本地演示环境。</p></div><button class="button primary">创建 API Key</button></div>
+      <section class="metrics">
+        <article class="metric"><div class="metric-label">今日请求</div><div class="metric-value">12,480</div><div class="metric-delta gold">+18.4%</div></article>
+        <article class="metric"><div class="metric-label">活跃密钥</div><div class="metric-value">6</div><div class="metric-delta blue">+2</div></article>
+        <article class="metric"><div class="metric-label">知识片段</div><div class="metric-value">3,214</div><div class="metric-delta green">+126</div></article>
+        <article class="metric"><div class="metric-label">平均时延</div><div class="metric-value">820ms</div><div class="metric-delta ink">-40ms</div></article>
+      </section>
+      <section class="data-grid">
+        <article class="panel"><div class="panel-head"><h2>近 7 日请求趋势</h2><span class="tag">网关正常</span></div><div class="panel-body"><div class="chart"><span class="bar" style="height:42%"></span><span class="bar" style="height:65%"></span><span class="bar" style="height:48%"></span><span class="bar highlight" style="height:91%"></span><span class="bar highlight" style="height:75%"></span><span class="bar highlight" style="height:88%"></span></div></div></article>
+        <article class="panel"><div class="panel-head"><h2>对外 API</h2></div><div class="panel-body"><div class="endpoint"><b class="method">POST</b><code>http://127.0.0.1:5178/v1/chat/completions</code></div></div></article>
+      </section>
+    </section>
+  </section>
+</main>
+</body>
+</html>

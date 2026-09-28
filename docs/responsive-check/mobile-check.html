@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>手机端布局自检（chat 页）</title>
+<link rel="stylesheet" href="../../web/styles.css" />
+</head>
+<body>
+<main class="chat-shell">
+  <aside class="doubao-sidebar">
+    <a class="chat-brand" href="#"><img src="../../web/assets/stardevil-mark.png" alt="星魔 Logo"><span><b>星魔</b></span></a>
+    <button class="side-new"><b>+</b><span>新建对话</span></button>
+    <nav class="side-actions">
+      <button class="side-action active"><i>◌</i><span>智能对话</span></button>
+      <button class="side-action"><i>□</i><span>控制台</span></button>
+      <button class="side-action"><i>⌘</i><span>API 服务</span></button>
+    </nav>
+    <div class="history-head"><span>最近对话</span><small>3</small></div>
+    <div class="history-list">
+      <button class="conversation active"><i>◌</i><span>星魔能为企业提供哪些能力</span></button>
+      <button class="conversation"><i>◌</i><span>如何接入智能对话 API</span></button>
+      <button class="conversation"><i>◌</i><span>智能客服落地方案</span></button>
+    </div>
+    <div class="sidebar-foot"><span class="foot-avatar">Y</span><span><b>Ynchen</b><small>星魔演示空间</small></span><button>...</button><button>⎋</button></div>
+  </aside>
+  <div class="sidebar-scrim"></div>
+  <section class="doubao-main">
+    <header class="chat-topline">
+      <button class="collapse-button"><svg class="menu-icon" viewBox="0 0 20 20" width="16" height="16"><rect x="2" y="4.4" width="16" height="1.7" rx="0.85" fill="currentColor"></rect><rect x="2" y="9.15" width="16" height="1.7" rx="0.85" fill="currentColor"></rect><rect x="2" y="13.9" width="16" height="1.7" rx="0.85" fill="currentColor"></rect></svg></button>
+      <div class="chat-top-actions"><button>服务正常</button><button>...</button></div>
+    </header>
+    <section class="doubao-stage">
+      <div class="doubao-scroll"><div id="chatContent"><div class="doubao-welcome">
+        <div class="welcome-brand"><div class="welcome-mark"><img src="../../web/assets/stardevil-mark.png" alt="星魔 Logo"></div><small>STARDEVIL</small></div>
+        <h1>有什么我能帮你的吗？</h1>
+        <p>星魔企业智能助手，为业务咨询、资料问答和智能服务提供支持。</p>
+        <div class="mode-switch"><button class="selected">对话</button><button>工作</button></div>
+        <div class="recommend-label">为你推荐</div>
+        <div class="recommend-list"><button>介绍一下星魔可以为企业提供哪些能力</button><button>如何通过 API 接入星魔的智能对话能力</button><button>帮我整理一个智能客服的落地方案</button><button>根据企业资料生成一份客户服务介绍</button></div>
+      </div></div></div>
+      <div class="doubao-composer-wrap"><div class="doubao-composer">
+        <textarea placeholder="发消息给星魔"></textarea>
+        <div class="composer-tools"><div><button class="tool-plus">+</button><button class="composer-tool">智能对话</button><button class="composer-tool">企业知识</button></div><button class="doubao-send" disabled>↑</button></div>
+      </div><p class="composer-note">星魔可能会生成不准确信息，请以实际业务资料为准</p></div>
+    </section>
+  </section>
+</main>
+<script>
+  var q = new URLSearchParams(location.search);
+  var s = q.get('s');
+  var shell = document.querySelector('.chat-shell');
+  if (s === 'open') shell.classList.add('sidebar-open');
+  if (s === 'collapsed') shell.classList.add('sidebar-collapsed');
+  if (q.get('many')) {
+    var list = document.querySelector('.history-list');
+    var tpl = list.children[0];
+    for (var i = 0; i < 22; i++) { list.appendChild(tpl.cloneNode(true)); }
+  }
+  if (q.get('probe')) {
+    var sb = document.querySelector('.doubao-sidebar');
+    var sbcs = getComputedStyle(sb);
+    var h1 = getComputedStyle(document.querySelector('.doubao-welcome h1'));
+    var st = getComputedStyle(document.querySelector('.doubao-scroll'));
+    var mainRect = document.querySelector('.doubao-main').getBoundingClientRect();
+    var rec = document.querySelector('.recommend-list button').getBoundingClientRect();
+    var cp = document.querySelector('.doubao-composer-wrap').getBoundingClientRect();
+    var probe = document.createElement('div');
+    probe.id = 'probe';
+    probe.style.cssText = 'position:fixed;left:0;bottom:0;z-index:9999;background:#000;color:#0f0;font:11px/1.5 monospace;padding:4px;white-space:pre-wrap';
+    probe.textContent = 'inner=' + window.innerWidth + 'x' + window.innerHeight + ' dpr=' + window.devicePixelRatio
+      + ' docW=' + document.documentElement.scrollWidth + ' bodyW=' + document.body.scrollWidth
+      + '\nsidebar: display=' + sbcs.display + ' pos=' + sbcs.position + ' w=' + Math.round(sb.getBoundingClientRect().width) + ' x=' + Math.round(sb.getBoundingClientRect().left)
+      + '\nmain: w=' + Math.round(mainRect.width) + ' x=' + Math.round(mainRect.left)
+      + '\nscroll pad=' + st.paddingLeft + ' h1=' + h1.fontSize
+      + '\nrecommendBtn: x=' + Math.round(rec.left) + ' w=' + Math.round(rec.width) + ' right=' + Math.round(rec.right)
+      + '\ncomposer: x=' + Math.round(cp.left) + ' w=' + Math.round(cp.width) + ' right=' + Math.round(cp.right);
+    document.body.appendChild(probe);
+  }
+</script>
+</body>
+</html>

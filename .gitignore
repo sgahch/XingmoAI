@@ -1,0 +1,27 @@
+data/
+infra/.env
+__pycache__/
+*.pyc
+
+# 第三方依赖：从 QuantumNous/new-api 原样克隆，不入库
+new-api/
+
+# 本地隧道可执行文件（cloudflared / cpolar）
+.tunnel/
+
+# 工具工作目录
+.workbuddy/
+
+# 调试临时文件
+cpolar*
+probe*
+attemptA*
+_check_up.py
+_query_tunnel.py
+setup_tunnel.py
+launch_flag*.txt
+svc_path.txt
+restart_result.txt
+*.err
+*.out
+*.log
