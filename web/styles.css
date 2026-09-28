@@ -75,6 +75,11 @@ button, input, textarea { font:inherit; } button { cursor:pointer; } a { color:i
 .conversation i { color:#9ca2aa; font-size:14px; font-style:normal; }
 .conversation span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .empty-history { margin:4px 9px; color:#a1a6ad; font-size:12px; }
+.guest-usage { margin:18px 8px 12px; padding:12px; border:1px solid #ece4c6; border-radius:8px; background:#fffdf5; color:#62605a; font-size:11px; line-height:1.6; }
+.guest-usage strong { display:block; margin-bottom:3px; color:#403817; font-size:12px; }
+.guest-usage span { display:block; color:#77705a; }.guest-usage span b { color:#9a7611; font-size:14px; }
+.guest-usage p { margin:7px 0 9px; color:#8d897b; }.guest-usage .button { width:100%; border-color:#e2c759; background:#fff; color:#6d5610; }
+.inline-link { border:0; padding:0; color:#8b6b0a; background:transparent; text-decoration:underline; cursor:pointer; }
 .sidebar-foot { display:flex; align-items:center; gap:8px; margin-top:auto; padding:9px 7px 3px; border-top:1px solid #eceef0; color:#363c44; }
 .sidebar-foot .foot-avatar { display:grid; width:27px; height:27px; place-items:center; border-radius:50%; color:#fff; background:#282d34; font-size:11px; font-weight:800; }
 .sidebar-foot span:nth-child(2) { display:flex; min-width:0; flex:1; flex-direction:column; gap:1px; }

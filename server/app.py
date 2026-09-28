@@ -34,6 +34,8 @@ DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "xingmo.db"
 MODEL_ALIAS = "xingmo-chat"
 SESSION_DAYS = 7
+GUEST_MESSAGE_LIMIT = 100
+GUEST_COOKIE = "xingmo_guest"
 
 # Optional HTTP Basic gate for public tunnels. Set XINGMO_TUNNEL_AUTH="user:pass"
 # to require Basic Auth on every request before the app's own routing/login runs.
@@ -60,7 +62,8 @@ def initialize() -> None:
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                owner_user_id TEXT
             );
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,6 +121,12 @@ def initialize() -> None:
                 upstream_model TEXT NOT NULL DEFAULT '',
                 expose_real_models INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS guest_usage (
+                token TEXT PRIMARY KEY,
+                messages_used INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         columns = {row[1] for row in connection.execute("PRAGMA table_info(api_keys)")}
@@ -125,6 +134,9 @@ def initialize() -> None:
             connection.execute("ALTER TABLE api_keys ADD COLUMN token_hash TEXT")
         if "owner_user_id" not in columns:
             connection.execute("ALTER TABLE api_keys ADD COLUMN owner_user_id TEXT")
+        conversation_columns = {row[1] for row in connection.execute("PRAGMA table_info(conversations)")}
+        if "owner_user_id" not in conversation_columns:
+            connection.execute("ALTER TABLE conversations ADD COLUMN owner_user_id TEXT")
         message_columns = {row[1] for row in connection.execute("PRAGMA table_info(messages)")}
         if "sources" not in message_columns:
             connection.execute("ALTER TABLE messages ADD COLUMN sources TEXT NOT NULL DEFAULT '[]'")
@@ -169,6 +181,12 @@ def initialize() -> None:
                 "INSERT INTO user_settings (user_id, upstream_mode, upstream_protocol, upstream_base_url, upstream_api_key, upstream_model, expose_real_models) VALUES (?, ?, ?, ?, ?, ?, 0)",
                 (admin_id, gs.get("upstream_mode", "demo"), gs.get("upstream_protocol", "openai"), gs.get("upstream_base_url", ""), "", gs.get("upstream_model", "")),
             )
+
+        # Conversations created before accounts were introduced were global. Retain
+        # that demo history for the original local administrator after migration.
+        connection.execute(
+            "UPDATE conversations SET owner_user_id = (SELECT id FROM users WHERE username = 'admin' LIMIT 1) WHERE owner_user_id IS NULL"
+        )
 
 
 def split_knowledge_text(content: str, size: int = 520, overlap: int = 80) -> list[str]:
@@ -448,6 +466,8 @@ class StarDevilHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        if getattr(self, "_guest_cookie", None):
+            self.set_guest_cookie(self._guest_cookie)
         self.end_headers()
         self.wfile.write(raw)
 
@@ -523,15 +543,47 @@ class StarDevilHandler(SimpleHTTPRequestHandler):
             ).fetchone()
         return row["owner_user_id"] if row else None
 
+    # ---- guest usage ----
+    def guest_token_from_request(self) -> str | None:
+        cookie = self.headers.get("Cookie", "")
+        match = re.search(rf"(?:^|;\s*){re.escape(GUEST_COOKIE)}=([^;]+)", cookie)
+        return unquote(match.group(1)) if match else None
+
+    def guest_remaining(self) -> int:
+        token = self.guest_token_from_request()
+        if not token:
+            return GUEST_MESSAGE_LIMIT
+        with db() as connection:
+            row = connection.execute("SELECT messages_used FROM guest_usage WHERE token = ?", (token,)).fetchone()
+        return max(0, GUEST_MESSAGE_LIMIT - int(row["messages_used"])) if row else GUEST_MESSAGE_LIMIT
+
+    def reserve_guest_message(self) -> tuple[str, int] | tuple[None, int]:
+        token = self.guest_token_from_request() or secrets.token_urlsafe(24)
+        now = utc_now()
+        with db() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT messages_used FROM guest_usage WHERE token = ?", (token,)).fetchone()
+            used = int(row["messages_used"]) if row else 0
+            if used >= GUEST_MESSAGE_LIMIT:
+                return None, 0
+            if row:
+                connection.execute("UPDATE guest_usage SET messages_used = messages_used + 1, updated_at = ? WHERE token = ?", (now, token))
+            else:
+                connection.execute("INSERT INTO guest_usage (token, messages_used, created_at, updated_at) VALUES (?, 1, ?, ?)", (token, now, now))
+        return token, GUEST_MESSAGE_LIMIT - used - 1
+
+    def set_guest_cookie(self, token: str) -> None:
+        self.send_header("Set-Cookie", f"{GUEST_COOKIE}={token}; HttpOnly; Path=/; Max-Age=31536000; SameSite=Lax")
+
     # ---- auth endpoints ----
     def auth_me(self) -> None:
         uid = self.user_from_request()
         if not uid:
-            self.json_response({"user": None}, HTTPStatus.UNAUTHORIZED)
+            self.json_response({"user": None, "guest": {"remaining": self.guest_remaining(), "limit": GUEST_MESSAGE_LIMIT}})
             return
         with db() as connection:
             row = connection.execute("SELECT id, username FROM users WHERE id = ?", (uid,)).fetchone()
-        self.json_response({"user": dict(row) if row else None})
+        self.json_response({"user": dict(row) if row else None, "guest": None})
 
     def auth_login(self, payload: dict) -> None:
         username = str(payload.get("username", "")).strip()
@@ -714,16 +766,21 @@ class StarDevilHandler(SimpleHTTPRequestHandler):
         )
 
     def conversations(self) -> None:
+        uid = self.user_from_request()
         with db() as connection:
             rows = connection.execute(
-                "SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
+                "SELECT id, title, created_at, updated_at FROM conversations WHERE owner_user_id = ? ORDER BY updated_at DESC", (uid,)
             ).fetchall()
         self.json_response([dict(row) for row in rows])
 
     def messages(self, conversation_id: str) -> None:
+        uid = self.user_from_request()
         with db() as connection:
             rows = connection.execute(
-                "SELECT role, content, sources, created_at FROM messages WHERE conversation_id = ? ORDER BY id", (conversation_id,)
+                """SELECT messages.role, messages.content, messages.sources, messages.created_at
+                   FROM messages JOIN conversations ON conversations.id = messages.conversation_id
+                  WHERE messages.conversation_id = ? AND conversations.owner_user_id = ?
+                  ORDER BY messages.id""", (conversation_id, uid)
             ).fetchall()
         messages = []
         for row in rows:
@@ -904,31 +961,44 @@ class StarDevilHandler(SimpleHTTPRequestHandler):
 
     def chat(self, payload: dict) -> None:
         uid = self.user_from_request()
-        config = upstream_config(uid)
         question = str(payload.get("message", "")).strip()
         if not question:
             return self.json_response({"error": "Message is required"}, HTTPStatus.BAD_REQUEST)
+        is_guest = not uid
+        if is_guest:
+            guest_token, remaining = self.reserve_guest_message()
+            if not guest_token:
+                self._guest_cookie = self.guest_token_from_request()
+                return self.json_response({"error": "访客体验额度已用完，请注册或登录后继续使用。", "code": "guest_quota_exhausted", "guest": {"remaining": 0, "limit": GUEST_MESSAGE_LIMIT}}, HTTPStatus.TOO_MANY_REQUESTS)
+            self._guest_cookie = guest_token
+        else:
+            remaining = None
+        config = upstream_config(uid)
         conversation_id = str(payload.get("conversation_id") or f"conv-{secrets.token_hex(6)}")
         use_upstream = config["mode"] in {"custom", "newapi"}
         sources = retrieve_knowledge(question)
         context = knowledge_prompt(sources)
         answer = ""
         now = utc_now()
-        with db() as connection:
-            exists = connection.execute("SELECT 1 FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
-            if not exists:
-                connection.execute(
-                    "INSERT INTO conversations VALUES (?, ?, ?, ?)", (conversation_id, question[:26], now, now)
-                )
-            else:
-                connection.execute("UPDATE conversations SET updated_at = ? WHERE id = ?", (now, conversation_id))
-            connection.execute("INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)", (conversation_id, "user", question, now))
+        if not is_guest:
+            with db() as connection:
+                exists = connection.execute("SELECT 1 FROM conversations WHERE id = ? AND owner_user_id = ?", (conversation_id, uid)).fetchone()
+                if not exists:
+                    connection.execute(
+                        "INSERT INTO conversations (id, title, created_at, updated_at, owner_user_id) VALUES (?, ?, ?, ?, ?)", (conversation_id, question[:26], now, now, uid)
+                    )
+                else:
+                    connection.execute("UPDATE conversations SET updated_at = ? WHERE id = ? AND owner_user_id = ?", (now, conversation_id, uid))
+                connection.execute("INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)", (conversation_id, "user", question, now))
         self.close_connection = True
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "close")
         self.send_header("X-Conversation-Id", conversation_id)
+        if is_guest:
+            self.send_header("X-Guest-Messages-Remaining", str(remaining))
+            self.set_guest_cookie(self._guest_cookie)
         self.end_headers()
         if use_upstream:
             try:
@@ -950,11 +1020,12 @@ class StarDevilHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(f"event: message\ndata: {payload_text}\n\n".encode("utf-8"))
                 self.wfile.flush()
                 time.sleep(0.028)
-        with db() as connection:
-            connection.execute(
-                "INSERT INTO messages (conversation_id, role, content, sources, created_at) VALUES (?, ?, ?, ?, ?)",
-                (conversation_id, "assistant", answer, json.dumps([{"name": item["name"]} for item in sources], ensure_ascii=False), utc_now()),
-            )
+        if not is_guest:
+            with db() as connection:
+                connection.execute(
+                    "INSERT INTO messages (conversation_id, role, content, sources, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (conversation_id, "assistant", answer, json.dumps([{"name": item["name"]} for item in sources], ensure_ascii=False), utc_now()),
+                )
         if sources:
             source_payload = json.dumps({"sources": [{"name": item["name"]} for item in sources]}, ensure_ascii=False)
             self.wfile.write(f"event: sources\ndata: {source_payload}\n\n".encode("utf-8"))
@@ -1031,6 +1102,10 @@ class StarDevilHandler(SimpleHTTPRequestHandler):
                 return
             return self.openai_models()
         if path.startswith("/api/"):
+            if path == "/api/auth/me":
+                return self.auth_me()
+            if path == "/api/chat":
+                return self.json_response({"error": {"message": "Method not allowed"}}, HTTPStatus.METHOD_NOT_ALLOWED)
             if not self.require_auth():
                 return
             if path == "/api/dashboard":
@@ -1069,10 +1144,10 @@ class StarDevilHandler(SimpleHTTPRequestHandler):
                 return
             return self.openai_completion(payload)
         if path.startswith("/api/"):
-            if not self.require_auth():
-                return
             if path == "/api/chat":
                 return self.chat(payload)
+            if not self.require_auth():
+                return
             if path == "/api/keys":
                 return self.create_key(payload)
             if path == "/api/settings":

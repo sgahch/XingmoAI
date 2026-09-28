@@ -1,4 +1,4 @@
-const state = { route: location.pathname === '/' ? '/chat' : location.pathname, conversations: [], conversationId: null, dashboard: null, keys: [], user: null };
+const state = { route: location.pathname === '/' ? '/chat' : location.pathname, conversations: [], conversationId: null, dashboard: null, keys: [], user: null, guestRemaining: 100, guestLimit: 100 };
 const app = document.querySelector('#app');
 const api = async (url, options) => { const response = await fetch(url, {...(options||{}), credentials: 'same-origin'}); let data = null; try { data = await response.json(); } catch(e) { data = null; } if (!response.ok) { const detail = data && (typeof data.message === 'string' ? data.message : (typeof data.error === 'string' ? data.error : data.error && data.error.message)); throw new Error(detail || ('请求未完成（HTTP ' + response.status + '）')); } return data; };
 const escapeHtml = (text) => String(text).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
@@ -23,12 +23,10 @@ async function renderChat() {
       <button id="newChat" class="side-new"><b>+</b><span>新建对话</span></button>
       <nav class="side-actions">
         <button class="side-action active"><i>◌</i><span>智能对话</span></button>
-        <button class="side-action" data-route="/admin"><i>□</i><span>控制台</span></button>
-        <button class="side-action" data-route="/developer"><i>⌘</i><span>API 服务</span></button>
+        ${state.user ? '<button class="side-action" data-route="/admin"><i>□</i><span>控制台</span></button><button class="side-action" data-route="/developer"><i>⌘</i><span>API 服务</span></button>' : '<button class="side-action" data-route="/login"><i>↗</i><span>注册 / 登录</span></button>'}
       </nav>
-      <div class="history-head"><span>最近对话</span><small>${state.conversations.length}</small></div>
-      <div id="conversationList" class="history-list">${conversationList()}</div>
-      <div class="sidebar-foot"><span class="foot-avatar">${state.user&&state.user.username?state.user.username[0].toUpperCase():'Y'}</span><span><b>${state.user?state.user.username:'Ynchen'}</b><small>星魔演示空间</small></span><button title="控制台" data-route="/admin">...</button><button title="退出登录" data-action="logout">⎋</button></div>
+      ${state.user ? `<div class="history-head"><span>最近对话</span><small>${state.conversations.length}</small></div><div id="conversationList" class="history-list">${conversationList()}</div>` : `<div class="guest-usage"><strong>访客体验</strong><span>还可发送 <b>${state.guestRemaining}</b> / ${state.guestLimit} 条消息</span><p>注册并登录后，聊天记录会保存，并可永久免费无限使用。</p><button class="button small" data-route="/login">注册 / 登录</button></div>`}
+      <div class="sidebar-foot"><span class="foot-avatar">${state.user&&state.user.username?state.user.username[0].toUpperCase():'访'}</span><span><b>${state.user?state.user.username:'访客'}</b><small>${state.user?'星魔工作空间':'未保存对话'}</small></span>${state.user ? '<button title="控制台" data-route="/admin">...</button><button title="退出登录" data-action="logout">⎋</button>' : '<button title="注册或登录" data-route="/login">↗</button>'}</div>
     </aside>
     <div class="sidebar-scrim" data-action="close-sidebar" aria-hidden="true"></div>
     <section class="doubao-main">
@@ -38,7 +36,7 @@ async function renderChat() {
         <div class="doubao-composer-wrap"><div class="doubao-composer">
           <textarea id="prompt" placeholder="发消息给星魔" aria-label="输入问题"></textarea>
           <div class="composer-tools"><div><button class="tool-plus" title="添加内容">+</button><button class="composer-tool">智能对话</button><button class="composer-tool">企业知识</button></div><button id="send" class="doubao-send" disabled title="发送消息">↑</button></div>
-        </div><p class="composer-note">星魔可能会生成不准确信息，请以实际业务资料为准</p></div>
+        </div><p class="composer-note">${state.user ? '星魔可能会生成不准确信息，请以实际业务资料为准' : `访客还可发送 ${state.guestRemaining} 条消息 · 注册登录后永久免费无限使用`}</p></div>
       </section>
     </section>
   </main>`;
@@ -53,7 +51,7 @@ async function renderChat() {
 }
 function welcome(){return `<div class="doubao-welcome"><div class="welcome-brand"><div class="welcome-mark">${chatLogo}</div><small>STARDEVIL</small></div><h1>有什么我能帮你的吗？</h1><p>星魔企业智能助手，为业务咨询、资料问答和智能服务提供支持。</p><div class="mode-switch"><button class="selected">对话</button><button>工作</button></div><div class="recommend-label">为你推荐</div><div class="recommend-list"><button data-prompt="介绍一下星魔可以为企业提供哪些能力">介绍一下星魔可以为企业提供哪些能力</button><button data-prompt="如何通过 API 接入星魔的智能对话能力">如何通过 API 接入星魔的智能对话能力</button><button data-prompt="帮我整理一个智能客服的落地方案">帮我整理一个智能客服的落地方案</button><button data-prompt="根据企业资料生成一份客户服务介绍">根据企业资料生成一份客户服务介绍</button></div></div>`;}
 function conversationList(){return state.conversations.length?state.conversations.map(item=>`<button class="conversation ${item.id===state.conversationId?'active':''}" data-conversation="${item.id}" title="${escapeHtml(item.title)}"><i>◌</i><span>${escapeHtml(item.title)}</span></button>`).join(''):'<p class="empty-history">暂时没有对话</p>';}
-async function loadConversations(){state.conversations=await api('/api/conversations');}
+async function loadConversations(){state.conversations=state.user?await api('/api/conversations'):[];}
 async function newChat(){state.conversationId=null; await renderChat();}
 async function openConversation(id, refresh=true){state.conversationId=id;if(refresh)return renderChat();closeSidebar();const messages=await api(`/api/conversations/${id}`);const list=document.querySelector('.message-list');if(!list)return;list.innerHTML=messages.map(message=>messageHtml(message.role,message.content,message.sources)).join('');document.querySelector('#chatScroll').scrollTop=999999;}
 function messageHtml(role, content, sources=[]){return `<article class="message ${role==='assistant'?'ai':'user'}"><div class="badge">${role==='assistant'?'M':'Y'}</div><div class="message-content"><div class="bubble">${escapeHtml(content)}</div>${role==='assistant'&&sources.length?sourceHtml(sources):''}</div></article>`;}
@@ -67,8 +65,10 @@ async function sendMessage(){
   list.insertAdjacentHTML('beforeend','<article class="message ai" id="assistantPending"><div class="badge">M</div><div class="message-content"><div class="bubble"><span class="typing"><i></i><i></i><i></i></span></div></div></article>');
   document.querySelector('#chatScroll').scrollTop=999999;
   try {
-    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:state.conversationId,message})});
-    if(!response.ok) throw new Error('对话服务暂不可用');
+    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({conversation_id:state.conversationId,message})});
+    if(!response.ok){let detail='对话服务暂不可用';try{const data=await response.json();detail=data.message||data.error?.message||detail;if(data.guest)state.guestRemaining=Number(data.guest.remaining||0);}catch{}throw new Error(detail);}
+    const guestRemaining=response.headers.get('X-Guest-Messages-Remaining');
+    if(guestRemaining!==null){state.guestRemaining=Number(guestRemaining);document.querySelector('.composer-note').textContent=`访客还可发送 ${state.guestRemaining} 条消息 · 注册登录后永久免费无限使用`;}
     state.conversationId=response.headers.get('X-Conversation-Id')||state.conversationId;
     const reader=response.body.getReader(); const decoder=new TextDecoder(); let buffer='',answer='',sources=[]; const target=document.querySelector('#assistantPending .bubble');
     while(true){
@@ -77,7 +77,7 @@ async function sendMessage(){
     }
     if(sources.length) document.querySelector('#assistantPending .message-content')?.insertAdjacentHTML('beforeend',sourceHtml(sources));
   } catch (error) { document.querySelector('#assistantPending .bubble').textContent=error.message||'对话服务暂不可用'; }
-  document.querySelector('#assistantPending')?.removeAttribute('id'); await loadConversations(); document.querySelector('#conversationList').innerHTML=conversationList(); document.querySelectorAll('[data-conversation]').forEach(button=>button.addEventListener('click',()=>openConversation(button.dataset.conversation)));
+  document.querySelector('#assistantPending')?.removeAttribute('id'); if(state.user){await loadConversations();const history=document.querySelector('#conversationList');if(history){history.innerHTML=conversationList();document.querySelectorAll('[data-conversation]').forEach(button=>button.addEventListener('click',()=>openConversation(button.dataset.conversation)));}} else {const note=document.querySelector('.composer-note');if(state.guestRemaining<=0){note.innerHTML='访客额度已用完，请 <button class="inline-link" data-route="/login">注册 / 登录</button> 后继续使用';bindRoutes();}}
 }
 
 function consoleNav(active){return `<aside class="console-nav"><div class="nav-heading">星魔控制台</div><button class="${active==='dashboard'?'active':''}" data-console="dashboard">概览</button><button class="${active==='knowledge'?'active':''}" data-console="knowledge">企业知识库</button><button class="${active==='keys'?'active':''}" data-console="keys">API 密钥</button><button class="${active==='conversations'?'active':''}" data-console="conversations">对话记录</button><button class="${active==='settings'?'active':''}" data-console="settings">模型通道</button></aside>`;}
@@ -107,18 +107,19 @@ async function renderDeveloper(){shell(`<section class="console"><aside class="c
   }'</pre></article><article class="panel" style="margin-top:16px"><div class="panel-head"><h2>接口约定</h2></div><div class="panel-body"><div class="info-list"><div><strong>认证</strong><span>在 Authorization Header 中使用 Bearer Token。</span></div><div><strong>模型别名</strong><span>始终传入 xingmo-chat。该别名会在服务端映射到内部模型通道。</span></div><div><strong>流式输出</strong><span>设置 stream=true 后以 SSE 返回，响应中的 model 字段保持为 xingmo-chat。</span></div></div></div></article></div><aside class="panel"><div class="panel-head"><h2>接入信息</h2></div><div class="panel-body"><div class="info-list"><div><strong>Base URL</strong><span>http://127.0.0.1:5178/v1</span></div><div><strong>默认模型</strong><span>xingmo-chat</span></div><div><strong>协议</strong><span>OpenAI Chat Completions</span></div><div><strong>安全边界</strong><span>不返回内部 NewAPI、真实模型或物理机服务地址。</span></div></div></div></aside></section></section></section>`);}
 function toast(message){const el=document.createElement('div');el.className='toast';el.textContent=message;document.body.appendChild(el);setTimeout(()=>el.remove(),4000);}
 async function render(){
-  try { const res = await fetch('/api/auth/me', {credentials:'same-origin'}); const data = await res.json(); state.user = data.user || null; }
+  try { const res = await fetch('/api/auth/me', {credentials:'same-origin'}); const data = await res.json(); state.user = data.user || null; if(data.guest){state.guestRemaining=Number(data.guest.remaining);state.guestLimit=Number(data.guest.limit||100);} }
   catch(e){ state.user = null; }
-  if(!state.user){ state.route='/login'; return renderLogin(); }
-  if(state.route==='/login'||state.route==='/') state.route='/chat';
+  if(state.user && (state.route==='/login'||state.route==='/')) state.route='/chat';
+  if(!state.user && state.route==='/') state.route='/chat';
   if(state.route==='/chat')return renderChat();
-  if(state.route==='/admin')return renderAdmin();
-  if(state.route==='/developer')return renderDeveloper();
+  if(state.route==='/login')return renderLogin();
+  if(state.route==='/admin'||state.route==='/developer'){if(!state.user){state.route='/login';return renderLogin();}return state.route==='/admin'?renderAdmin():renderDeveloper();}
   return renderChat();
 }
 async function doLogout(){ try{ await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'}); }catch(e){} state.user=null; state.route='/login'; render(); }
 async function renderLogin(){
-  app.innerHTML = `<main class="auth-shell"><div class="auth-card"><div class="auth-brand">${logo}<span>星魔<small>STARDEVIL</small></span></div><h1>登录星魔控制台</h1><div class="auth-tabs"><button data-tab="login" class="active">登录</button><button data-tab="register">注册</button></div><form id="authForm" class="auth-form"><div class="field"><label>用户名</label><input id="authUser" placeholder="请输入用户名" autocomplete="username"></div><div class="field"><label>密码</label><input id="authPass" type="password" placeholder="请输入密码" autocomplete="current-password"></div><button id="authSubmit" class="button dark" type="submit" style="margin-top:6px">登录</button></form><p class="auth-hint">试用账号：admin / admin123（注册的新账号将拥有独立的模型通道配置）</p></div></main>`;
+  app.innerHTML = `<main class="auth-shell"><div class="auth-card"><div class="auth-brand">${logo}<span>星魔<small>STARDEVIL</small></span></div><h1>${state.user ? "欢迎回来" : "登录星魔"}</h1><div class="auth-tabs"><button data-tab="login" class="active">登录</button><button data-tab="register">注册</button></div><form id="authForm" class="auth-form"><div class="field"><label>用户名</label><input id="authUser" placeholder="请输入用户名" autocomplete="username"></div><div class="field"><label>密码</label><input id="authPass" type="password" placeholder="请输入密码" autocomplete="current-password"></div><button id="authSubmit" class="button dark" type="submit" style="margin-top:6px">登录</button></form><p class="auth-hint">注册并登录后，聊天记录会保存，且聊天功能永久免费无限使用。未注册用户也可以先体验 100 条消息。</p><button class="button" data-route="/chat" style="width:100%;margin-top:10px">先体验访客聊天</button></div></main>`;
+  bindRoutes();
   let mode='login';
   document.querySelectorAll('.auth-tabs button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.auth-tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');mode=b.dataset.tab;document.querySelector('#authSubmit').textContent=mode==='login'?'登录':'注册并登录';}));
   document.querySelector('#authForm').addEventListener('submit',async(e)=>{e.preventDefault();const username=document.querySelector('#authUser').value.trim();const password=document.querySelector('#authPass').value;if(!username||!password)return toast('请输入用户名和密码');try{const res=await fetch(`/api/auth/${mode}`,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({username,password})});const data=await res.json();if(!res.ok)return toast(data.error||'操作失败');state.user=data.user;state.route='/chat';render();}catch(err){toast('网络错误，请重试');}});
